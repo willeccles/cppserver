@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -5,24 +6,32 @@
 #include <errno.h>
 #include <fstream>
 #include <iostream>
-#include <arpa/inet.h>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <string_view>
-#include <sstream>
-#include <map>
+
+#include "mimetypes.h"
+#include "config.h"
+
+/* Default Config Parameters */
+#ifndef CONF_INDEX
+#define CONF_INDEX "index.html"
+#endif
+#ifndef CONF_404
+#define CONF_404 "404.html"
+#endif
+#ifndef SERVER_NAME
+#define SERVER_NAME "cppserver"
+#endif
 
 static std::string rootdir = ".";
 static std::string ip = "127.0.0.1";
 static uint16_t port = 8080;
-const static std::string servername = "BadServer";
-
-const std::map<std::string, std::string> MIME_TYPES {
-    { "html", "text/html" }
-};
+const static std::string servername = SERVER_NAME;
 
 void printusage(char* exe) {
     std::fprintf(stderr,
@@ -132,7 +141,7 @@ int runserver() {
 
 void handle_request(int fd, std::string request) {
     std::ifstream infile;
-    std::string status, filecontents, tmp;
+    std::string status, filecontents;
     std::stringstream packet;
     bool OK = false;
 
@@ -141,11 +150,11 @@ void handle_request(int fd, std::string request) {
         std::string fpath = request;
         
         if (fpath == "/") {
-            fpath = "/index.html";
+            fpath = "/" CONF_INDEX;
         }
         
         std::string fext = fpath;
-        fext.erase(0, fpath.find_last_of('.') + 1);
+        fext.erase(0, fpath.find_last_of('.'));
 
         fpath = rootdir + fpath;
 
@@ -154,17 +163,36 @@ void handle_request(int fd, std::string request) {
                     std::ios_base::in | std::ios_base::binary);
         
             OK = (bool)infile;
+            
+            status = "200 OK";
 
             if (!OK) {
                 status = "500 Internal Server Error";
             } else {
-                status = "200 OK";
-                while (std::getline(infile, tmp)) {
-                    filecontents += tmp + "\r\n";
+                while (!infile.eof()) {
+                    filecontents += infile.get();
                 }
             }
         } else {
             status = "404 Not Found";
+#ifdef CONF_404
+            fpath = rootdir + CONF_404;
+            fext = fpath;
+            fext.erase(0, fpath.find_last_of('.'));
+
+            infile.open(rootdir + "/" + CONF_404,
+                    std::ios_base::in | std::ios_base::binary);
+        
+            OK = (bool)infile;
+
+            if (!OK) {
+                status = "500 Internal Server Error";
+            } else {
+                while (!infile.eof()) {
+                    filecontents += infile.get();
+                }
+            }
+#endif
         }
 
         packet << "HTTP/1.1 " << status << "\r\n";
@@ -176,13 +204,13 @@ void handle_request(int fd, std::string request) {
             } else {
                 packet << "Content-Type: application/octet-stream\r\n";
             }
-            packet << "Content-Length: " << filecontents.length() << "\r\n";
+            packet << "Content-Length: " << filecontents.length() - 1 << "\r\n";
         }
 
         packet << "\r\n";
 
         if (OK) {
-            packet << filecontents;
+            packet << filecontents << "\r\n";
             infile.close();
         }
 
