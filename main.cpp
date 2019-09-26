@@ -12,10 +12,17 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <string_view>
+#include <sstream>
+#include <map>
 
 static std::string rootdir = ".";
 static std::string ip = "127.0.0.1";
 static uint16_t port = 8080;
+const static std::string servername = "BadServer";
+
+const std::map<std::string, std::string> MIME_TYPES {
+    { "html", "text/html" }
+};
 
 void printusage(char* exe) {
     std::fprintf(stderr,
@@ -110,7 +117,7 @@ int runserver() {
                 exit(1);
             }
             
-            std::printf("%s\n", in);
+            //std::printf("%s\n", in);
 
             handle_request(newfd, in);
 
@@ -124,9 +131,63 @@ int runserver() {
 }
 
 void handle_request(int fd, std::string request) {
+    std::ifstream infile;
+    std::string status, filecontents, tmp;
+    std::stringstream packet;
+    bool OK = false;
+
     if (request.starts_with("GET")) {
         request.erase(0, 4).erase(request.find_first_of(' '), request.length() - 1);
-        std::string fpath = rootdir + request;
-        std::cout << fpath << '\n';
+        std::string fpath = request;
+        
+        if (fpath == "/") {
+            fpath = "/index.html";
+        }
+        
+        std::string fext = fpath;
+        fext.erase(0, fpath.find_last_of('.') + 1);
+
+        fpath = rootdir + fpath;
+
+        if (0 == access(fpath.c_str(), F_OK)) {
+            infile.open(fpath,
+                    std::ios_base::in | std::ios_base::binary);
+        
+            OK = (bool)infile;
+
+            if (!OK) {
+                status = "500 Internal Server Error";
+            } else {
+                status = "200 OK";
+                while (std::getline(infile, tmp)) {
+                    filecontents += tmp + "\r\n";
+                }
+            }
+        } else {
+            status = "404 Not Found";
+        }
+
+        packet << "HTTP/1.1 " << status << "\r\n";
+        packet << "Server: " << servername << "\r\n";
+
+        if (OK) {
+            if (MIME_TYPES.find(fext) != MIME_TYPES.end()) {
+                packet << "Content-Type: " << MIME_TYPES.at(fext) << "\r\n";
+            } else {
+                packet << "Content-Type: application/octet-stream\r\n";
+            }
+            packet << "Content-Length: " << filecontents.length() << "\r\n";
+        }
+
+        packet << "\r\n";
+
+        if (OK) {
+            packet << filecontents;
+            infile.close();
+        }
+
+        std::cout << packet.str().c_str();
+
+        write(fd, packet.str().c_str(), packet.str().length());
     }
 }
