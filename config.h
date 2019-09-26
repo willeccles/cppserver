@@ -8,6 +8,13 @@
 //#define CONF_INDEX "index.html"
 
 /* Server Name (default: cppserver) */
-//#define SERVER_NAME "cppserver"
+//#define CONF_SERVER_NAME "cppserver"
+
+/* Max number of backlog items (default: 10) */
+//#define CONF_BACKLOG 10
+
+/* Enable debug features (such as the /sleep endpoint)
+ * Value is not used. */
+//#define CONF_DEBUG 1
 
 #endif /* CPPSERVER_CONFIG_H */

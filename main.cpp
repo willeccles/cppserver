@@ -21,17 +21,25 @@
 #ifndef CONF_INDEX
 #define CONF_INDEX "index.html"
 #endif
+
 #ifndef CONF_404
 #define CONF_404 "404.html"
 #endif
-#ifndef SERVER_NAME
-#define SERVER_NAME "cppserver"
+
+#ifndef CONF_SERVER_NAME
+#define CONF_SERVER_NAME "cppserver"
+#endif
+
+#ifndef CONF_BACKLOG
+#define CONF_BACKLOG 10
+#elif CONF_BACKLOG <= 0
+#error "CONF_BACKLOG must be greater than zero!"
 #endif
 
 static std::string rootdir = ".";
 static std::string ip = "127.0.0.1";
 static uint16_t port = 8080;
-const static std::string servername = SERVER_NAME;
+const static std::string servername = CONF_SERVER_NAME;
 
 void printusage(char* exe) {
     std::fprintf(stderr,
@@ -100,7 +108,7 @@ int runserver() {
         return 1;
     }
 
-    if (listen(sockfd, 10) == -1) {
+    if (listen(sockfd, CONF_BACKLOG) == -1) {
         perror("listen");
         return 1;
     }
@@ -119,6 +127,7 @@ int runserver() {
         }
 
         // fork to child process
+        // TODO make a thread pool with a configurable number of workers in it rather than using fork()
         if (!fork()) {
             close(sockfd);
             if (read(newfd, in, 4096) == -1) {
@@ -126,8 +135,6 @@ int runserver() {
                 exit(1);
             }
             
-            //std::printf("%s\n", in);
-
             handle_request(newfd, in);
 
             exit(0);
@@ -139,11 +146,22 @@ int runserver() {
     return 0;
 }
 
+#ifdef CONF_DEBUG
+// for the "/sleep" endpoint
+#include <thread>
+#include <chrono>
+#endif
+
 void handle_request(int fd, std::string request) {
     std::ifstream infile;
     std::string status, filecontents;
     std::stringstream packet;
     bool OK = false;
+
+    std::string rqheader = request;
+    rqheader.erase(rqheader.find("HTTP/1.1"), rqheader.length() - 1);
+
+    std::printf("Received request: %s\n", rqheader.c_str());
 
     if (request.starts_with("GET")) {
         request.erase(0, 4).erase(request.find_first_of(' '), request.length() - 1);
@@ -152,6 +170,14 @@ void handle_request(int fd, std::string request) {
         if (fpath == "/") {
             fpath = "/" CONF_INDEX;
         }
+
+#ifdef CONF_DEBUG
+        if (fpath == "/sleep") {
+            std::printf("Sleeping for 5 seconds, then serving index.\n");
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            fpath = "/" CONF_INDEX;
+        }
+#endif
         
         std::string fext = fpath;
         fext.erase(0, fpath.find_last_of('.'));
@@ -213,8 +239,6 @@ void handle_request(int fd, std::string request) {
             packet << filecontents << "\r\n";
             infile.close();
         }
-
-        std::cout << packet.str().c_str();
 
         write(fd, packet.str().c_str(), packet.str().length());
     }
