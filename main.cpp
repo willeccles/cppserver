@@ -178,13 +178,15 @@ void handle_request(int fd, std::string request) {
             fpath = "/" CONF_INDEX;
         }
 #endif
-        
+
         std::string fext = fpath;
         fext.erase(0, fpath.find_last_of('.'));
 
         fpath = rootdir + fpath;
 
-        if (0 == access(fpath.c_str(), F_OK)) {
+        if (fpath.find("../") != std::string::npos) {
+            status = "403 Forbidden";
+        } else if (0 == access(fpath.c_str(), F_OK)) {
             infile.open(fpath,
                     std::ios_base::in | std::ios_base::binary);
         
