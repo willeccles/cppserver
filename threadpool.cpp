@@ -2,20 +2,21 @@
 
 // see https://stackoverflow.com/a/32593825/2712525
 
-void thread_loop_fn() {
+void thread_loop_fn(std::mutex* tpmut, std::condition_variable& cond,
+        std::atomic<bool> accept, std::queue<std::function<void()>>& jqueue) {
     std::function<void()> tfxn;
     while (true) {
         {
-            std::unique_lock<std::mutex> lock(tpmutex);
+            std::unique_lock<std::mutex> lock(tpmut);
 
-            condition.wait(lock, [this]{ return !jobqueue.empty() || terminate; });
+            cond.wait(lock, [&]{ return !jqueue.empty() || !accept; });
 
-            if (terminate) {
+            if (!accept) {
                 return;
             }
             
-            tfxn = jobqueue.front();
-            jobqueue.pop();
+            tfxn = std::function<void()>(std::move(jqueue.front()));
+            jqueue.pop();
 
             // release lock
         }
@@ -36,12 +37,12 @@ ThreadPool::~ThreadPool() {
 
 void ThreadPool::fill_pool() {
     for (std::size_t i = 0; i < thread_count; i++) {
-        tpool.push_back(std::thread(thread_loop_fn));
+        tpool.push_back(std::thread(thread_loop_fn, &tpmutex, condition, accept, jobqueue));
     }
 }
 
 template<class... Ts>
-bool ThreadPool::queue_job(void (*job)(Ts...), Ts... args) {
+bool ThreadPool::enqueue_job(void (*job)(Ts...), Ts... args) {
     {
         if (!accept) return false;
         std::unique_lock<std::mutex> lock(tpmutex);

@@ -16,7 +16,7 @@ int main(void) {
     ThreadPool mytp(5, 10);
 
     for (int i = 0; i < 25; i++) {
-        if (mytp.queue_job((i % 2 == 0) ? thing2 : thing, i)) {
+        if (mytp.enqueue_job((i % 2 == 0) ? thing2 : thing, i)) {
             std::printf("Queued job %d!\n", i);
         } else {
             std::printf("Job %d failed!\n", i);

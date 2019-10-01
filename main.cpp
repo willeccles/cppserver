@@ -134,7 +134,7 @@ int runserver() {
                 perror("receive");
                 exit(1);
             }
-            
+
             handle_request(newfd, in);
 
             exit(0);

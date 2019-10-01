@@ -24,7 +24,7 @@ class ThreadPool {
         ~ThreadPool();
         
         template<typename... Ts>
-        bool queue_job(void (*job)(Ts...), Ts... arg);
+        bool enqueue_job(void (*job)(Ts...), Ts... arg);
 
     private:
         std::size_t thread_count;
